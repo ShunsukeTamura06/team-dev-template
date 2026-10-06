@@ -1,0 +1,31 @@
+# PR-Agent(AIレビュー)の設定。デフォルトブランチ(main)にあるものが使われる。
+# モデル・接続先はCI変数で指定する(.gitlab-ci.yml 参照)。ここにはレビュー方針だけを書く。
+
+[config]
+response_language = "ja-JP"
+# レビュー時にAIへ渡すチームルールと業務文脈(mainブランチの内容が使われる)
+repo_context_files = ["AGENTS.md", "README.md"]
+repo_context_max_lines = 500
+
+[pr_reviewer]
+num_max_findings = 3
+require_tests_review = true
+require_security_review = true
+require_estimate_effort_to_review = false
+extra_instructions = """
+最重要の観点は「作成者以外のメンバーが、このコードを保守できるか」。
+AGENTS.md のチーム開発ルールへの違反を優先して指摘し、どのルールに反するかを番号で示すこと。
+フォーマット・import順・未使用変数はCIのruffが検出するため指摘しないこと。
+業務仕様の正誤は判断できないため、不明確な箇所は断定せず「確認事項」として質問の形で書くこと。
+仕様・設定値・入出力が変わっているのにREADMEが更新されていなければ指摘すること。
+本番データ更新・DB構造変更・外部システム接続・削除処理を含む場合は、冒頭でその旨を明記すること。
+"""
+
+[pr_code_suggestions]
+focus_only_on_problems = true
+# 7未満の重要度の提案は出さない(指摘の量を絞り、読まれ続けるようにするため)
+suggestions_score_threshold = 7
+extra_instructions = """
+AGENTS.md のチーム開発ルールに沿った修正提案を優先すること。
+好みの問題に過ぎない書き換えは提案しないこと。
+"""

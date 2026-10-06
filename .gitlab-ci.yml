@@ -1,0 +1,64 @@
+# MRごとに「lint → test」と「AIレビュー」を実行する。
+# 必要なCI変数(グループ単位で一度設定すれば全リポジトリで使える)は docs/TEMPLATE_GUIDE.md を参照。
+
+variables:
+  # 社内でDocker Hubに出られない場合は、社内レジストリのイメージに差し替える
+  PYTHON_IMAGE: "python:3.12-slim"
+  PR_AGENT_IMAGE: "pragent/pr-agent:latest"   # 安定したら特定バージョンに固定する
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+stages:
+  - check
+  - review
+
+.python:
+  image: $PYTHON_IMAGE
+  cache:
+    paths: [.cache/pip]
+  before_script:
+    - pip install -q -r requirements-dev.txt
+
+lint:
+  extends: .python
+  stage: check
+  script:
+    - ruff format --check .
+    - ruff check .
+
+test:
+  extends: .python
+  stage: check
+  script:
+    - pytest -q
+
+ai_review:
+  stage: review
+  needs: []               # lint/test の結果を待たずに並行実行する
+  allow_failure: true     # LLMが落ちていてもマージは止めない
+  image:
+    name: $PR_AGENT_IMAGE
+    entrypoint: [""]
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  script:
+    - cd /app
+    - export MR_URL="$CI_MERGE_REQUEST_PROJECT_URL/merge_requests/$CI_MERGE_REQUEST_IID"
+    # GitLab への接続
+    - export config__git_provider="gitlab"
+    - export gitlab__url="$CI_SERVER_PROTOCOL://$CI_SERVER_FQDN"
+    - export gitlab__PERSONAL_ACCESS_TOKEN="$AI_REVIEW_GITLAB_TOKEN"
+    - if [ -n "$CI_SERVER_TLS_CA_FILE" ]; then export gitlab__SSL_VERIFY="$CI_SERVER_TLS_CA_FILE"; fi
+    # 社内LLM API(OpenAI互換)への接続。モデル名は "openai/<モデル名>" の形式
+    - export openai__api_base="$AI_REVIEW_API_BASE"
+    - export openai__key="$AI_REVIEW_API_KEY"
+    - export config__model="$AI_REVIEW_MODEL"
+    - export config__fallback_models="[\"$AI_REVIEW_MODEL\"]"
+    - export config__custom_model_max_tokens="${AI_REVIEW_MAX_TOKENS:-128000}"
+    # レビュー実行
+    - python -m pr_agent.cli --pr_url="$MR_URL" review
+    - python -m pr_agent.cli --pr_url="$MR_URL" improve
