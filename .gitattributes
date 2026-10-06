@@ -1,0 +1,7 @@
+# Windows / Mac 混在でも改行コードの差分が出ないようにする
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.xlsx binary
+*.xlsm binary
+*.accdb binary
