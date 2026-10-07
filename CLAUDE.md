@@ -1,10 +1,9 @@
-@AGENTS.md
 @README.md
+@docs/DESIGN.md
 
-## Claude Code 用の補足
-
-- 上のチーム開発ルール(AGENTS.md)と、READMEの業務文脈を前提に作業する
-- ファイル編集後は hooks で ruff が自動実行される。ruff がエラーを返したら修正する
-- MRを作る前に `/self-review` を実行する
-- 仕様を変えたら `/update-context` でREADMEの業務文脈を更新する
-- 初めて触るリポジトリを把握するときは `/handover` を使う
+<!--
+このリポジトリは、チーム標準の中央リポジトリ。ここを変えると、全員の Claude Code と全ツールの CI に影響する。
+- 変更したら `python -m pytest tests` を実行する
+- 共通のものを各ツールのリポジトリ(templates/tool/)に写す変更はしない(DESIGN.md の原則)
+- 変更の種類を増やしたら、DESIGN.md の「変更の一覧」と OPERATIONS.md も更新する
+-->

@@ -1,0 +1,29 @@
+# チーム共通の AI レビュー(PR-Agent)の方針。CI(ci/python-tool.yml)が毎回このファイルを読み込む。
+# ここを変えると、次の MR から全ツールに反映される。
+# 各ツールのリポジトリには .pr_agent.toml を置かない(置くとこのファイルより優先され、チームの方針から外れるため)。
+# ツール固有の事情は、そのツールの README の「このツール固有のルール」に書けば AI レビューに伝わる。
+# レビューの基準になるチーム共通ルール(plugins/team/rules.md)は、CI が別途レビューに渡している。
+
+[config]
+response_language = "ja-JP"
+# ツールごとの業務文脈と固有ルールは、各ツールの README から読む(main ブランチの内容)
+repo_context_files = ["README.md"]
+repo_context_max_lines = 500
+
+[artifacts]
+artifact_label = "チーム共通ルール"
+artifact_instructions = "これはチーム共通ルールです。レビューの基準として使い、違反はルール番号を示して指摘してください。README の「このツール固有のルール」と食い違う場合は、README を優先してください。"
+
+[pr_reviewer]
+num_max_findings = 3
+require_tests_review = true
+require_security_review = true
+require_estimate_effort_to_review = false
+
+[pr_code_suggestions]
+focus_only_on_problems = true
+# 重要度7未満の提案は出さない(指摘の量を絞り、読まれ続けるようにするため)
+suggestions_score_threshold = 7
+extra_instructions = """
+好みの問題に過ぎない書き換えは提案しないこと。
+"""

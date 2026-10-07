@@ -1,27 +1,6 @@
-# 秘密情報・実データ(Gitに入れない)
-.env
-data/
-output/
-*.xlsx
-*.xlsm
-*.xls
-*.accdb
-*.mdb
-!tests/fixtures/**
-
-# Office の一時ファイル
-~$*
-
-# 個人用の Claude Code 設定
-CLAUDE.local.md
-.claude/settings.local.json
-
-# Python
 __pycache__/
 *.py[cod]
 .venv/
 venv/
 .pytest_cache/
 .ruff_cache/
-*.egg-info/
-.cache/

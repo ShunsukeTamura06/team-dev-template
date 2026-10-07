@@ -1,0 +1,14 @@
+{
+  "name": "team-dev",
+  "description": "開発チームの共通ルール・自動整形・スキルを配るマーケットプレイス",
+  "owner": {
+    "name": "開発チーム"
+  },
+  "plugins": [
+    {
+      "name": "team",
+      "source": "./plugins/team",
+      "description": "チーム共通ルールの読み込み、編集後の自動整形、/team:self-review などのスキル"
+    }
+  ]
+}

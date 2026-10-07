@@ -1,80 +1,63 @@
-# (ツール名)
+# team-dev-template
 
-> **この README は、各ツールの README のひな形です。**
-> テンプレートの説明・導入手順・運用手順は、テンプレートリポジトリ `team-dev-template` の
-> [docs/TEMPLATE_GUIDE.md](docs/TEMPLATE_GUIDE.md) を参照してください。
->
-> 各ツールでは、( )を埋めたうえで、この囲みを削除してください。
-> Claude Code で `/update-context` を実行すると、コードから下書きを作り、分からないことを質問してくれます。
+業務ツールを開発するチーム(各ツールを1人ずつ担当し、全員が Claude Code を使う)のための、チーム標準の一式です。
+目的は、**担当者以外でも、どのツールも保守できる状態を保つこと**です。
 
-## 目的
+## 何が入っているか
 
-(このツールが何をするか、1〜3行で)
+| 仕組み | 中身 | 効く場所 |
+|---|---|---|
+| Claude Code のプラグイン `team` | チーム共通ルールの読み込み、実データを読ませない保護、編集後の自動整形、`/team:...` のスキル | 各自の PC |
+| 共通 CI | 変更したファイルの書式チェック、テスト、社内 LLM による AI レビュー | 社内 GitLab の各ツールの MR |
+| 新しいツールのひな形 | README の型、構成、CI の参照 | 新しいツール |
+| 管理スクリプト | main ブランチの保護設定 | 推進担当の PC |
 
-## 業務背景
+チーム共通のものは、すべてこのリポジトリにだけ置きます。各ツールのリポジトリは、ここを参照するだけです。
+ルールを変えるときは、このリポジトリを1か所変えれば、全員の Claude Code と全ツールの CI に反映されます。
 
-<!-- コードから読み取れない「なぜ」を書く。次に保守する人(とそのClaude Code)が一番必要とする情報 -->
+## 文書
 
-- 依頼元・利用部署: (例: 債券運用部 〇〇チーム)
-- なぜこのツールが必要か: (例: 月末の〇〇照合を手作業で2時間かけていたため)
-- 重要な判定ルールとその理由: (例: 残存期間1年未満を除外するのは、〇〇規程で対象外とされているため)
+| 文書 | 読む人 | 内容 |
+|---|---|---|
+| [docs/ROLLOUT.md](docs/ROLLOUT.md) | 推進担当・全員 | 導入時に1回だけ行う作業 |
+| [docs/OPERATIONS.md](docs/OPERATIONS.md) | 全員 | 日々の開発と、ルールなどを変えるときの作業 |
+| [docs/DESIGN.md](docs/DESIGN.md) | 推進担当・チーフ | 何をどこに置くか、何が変わったら誰が何をするかの一覧 |
+| [plugins/team/rules.md](plugins/team/rules.md) | 全員 | チーム共通ルール(正本) |
 
-## 利用者と利用タイミング
+## スキル(Claude Code で入力する)
 
-- 誰が: (例: 運用担当者2名)
-- いつ: (例: 毎営業日 9:00、月末最終営業日)
-- どこで: (例: 担当者のPCから手動実行 / タスクスケジューラ)
+| 入力 | いつ使うか |
+|---|---|
+| `/team:setup` | 自分の PC の初期設定(最初に1回。警告が出たときも) |
+| `/team:new-tool` | 新しいツールをひな形から作る |
+| `/team:adopt` | 既存のツールをチーム標準に乗せる |
+| `/team:self-review` | MR を作る前に、CI と同じ確認をする |
+| `/team:update-context` | README(業務文脈)を書く・更新する |
+| `/team:handover` | 担当を引き継ぐための説明を作る |
 
-## 入力
+## フォルダ構成
 
-| 項目 | 場所 | 形式 | 作成元 |
-|---|---|---|---|
-| (例: 保有明細) | (例: `INPUT_DIR` 配下) | (例: xlsx、シート名「明細」) | (例: 〇〇システムから出力) |
-
-## 出力
-
-| 項目 | 場所 | 形式 | 使う人 |
-|---|---|---|---|
-| (例: 照合結果) | (例: `OUTPUT_DIR` 配下) | (例: csv) | (例: 運用担当者が確認) |
-
-## 実行方法
-
-```bash
-python -m venv .venv
-# Windows: .venv\Scripts\activate   Mac/Linux: source .venv/bin/activate
-pip install -r requirements-dev.txt
-copy .env.example .env   # Mac/Linux: cp .env.example .env  → 中身を編集
-python -m app.main
+```
+.claude-plugin/marketplace.json   Claude Code のマーケットプレイスの定義
+plugins/team/                     プラグイン本体
+  rules.md                        チーム共通ルール(正本)
+  ruff.toml / tool-versions.txt   書式チェックの設定と、ruff・pytest のバージョン
+  protected-paths.txt             Claude Code に読み書きさせないパス
+  hooks/ scripts/                 起動時・編集前後に動く処理
+  skills/                         /team:... のスキル
+  templates/tool/                 新しいツールのひな形
+ci/python-tool.yml                全ツール共通の CI(各ツールから include される)
+pr-agent/pr_agent.toml            AI レビューの設定
+admin/gitlab_admin.py             main ブランチの保護設定
+tests/                            このリポジトリ自身のテスト
 ```
 
-## 環境変数
+## このリポジトリを変更するとき
 
-`.env` に設定する。項目は `.env.example` を参照。
+変更は MR で行い、チーフが承認します。MR では CI が `tests/` を実行し、全ツールを壊す変更を防ぎます。
+手元で確認する場合:
 
-| 名前 | 意味 | 例 |
-|---|---|---|
-| `INPUT_DIR` | 入力ファイルの置き場所 | `C:\work\input` |
-| `OUTPUT_DIR` | 出力先 | `C:\work\output` |
-| `LOG_LEVEL` | ログの詳細度 | `INFO` |
-
-## 障害時の確認箇所
-
-1. ログ(実行時にコンソールへ出力)に ERROR / WARNING が出ていないか
-2. 入力ファイルが所定の場所にあり、形式(シート名・列)が変わっていないか
-3. (このツール固有の確認箇所)
-
-## 過去の障害・注意点
-
-- (例: 2026/04 入力元システムの列順変更で照合結果が空になった → 列名で読むよう修正済み)
-
-## 用語集
-
-| 業務用語 | コード上の名前 |
-|---|---|
-| (例: 約定日) | `trade_date` |
-| (例: 受渡日) | `settlement_date` |
-
-## 担当
-
-- 主担当: (名前)
-- 副担当: (名前)
+```
+pip install -r plugins/team/tool-versions.txt pyyaml
+python -m pytest tests
+```

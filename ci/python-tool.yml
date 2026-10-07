@@ -1,0 +1,117 @@
+# チーム標準の CI。各ツールの .gitlab-ci.yml から include される。
+# ここを変えると、次のパイプラインから全ツールに反映される。変更は MR で行う。
+#
+# 使う CI 変数(GitLab グループで登録する。docs/ROLLOUT.md の段階3を参照):
+#   TEAM_STANDARDS_PROJECT  このリポジトリのパス(例: my-group/team-dev-template)
+#   TEAM_BOT_TOKEN          このリポジトリを読み、MR にコメントするためのグループアクセストークン
+#   AI_REVIEW_API_BASE / AI_REVIEW_API_KEY / AI_REVIEW_MODEL / AI_REVIEW_MAX_TOKENS  社内 LLM API
+#   (任意) PIP_INDEX_URL  社内 PyPI ミラー   (任意) INTERNAL_CA_CERT  社内 CA 証明書(File 型)
+
+variables:
+  # 社内で Docker Hub に出られない場合は、社内レジストリのイメージに差し替える
+  # (lint ジョブが git を使うため、git が入ったイメージにする。python:3.12-slim には git が無い)
+  TEAM_PYTHON_IMAGE: "python:3.12"
+  TEAM_PR_AGENT_IMAGE: "pragent/pr-agent:latest"   # 安定したら特定バージョンに固定する
+  # 共通の設定ファイルを取得するブランチ。共通 CI の変更を試すときだけ、ツール側で上書きする(OPERATIONS.md 3-3)
+  TEAM_STANDARDS_REF: "main"
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+stages:
+  - check
+  - review
+
+# チーム標準リポジトリ(TEAM_STANDARDS_REF のブランチ)から、共通の設定ファイルを .team/ に取得する
+.team_fetch:
+  script:
+    - |
+      python - <<'PY'
+      import os, pathlib, ssl, urllib.parse, urllib.request
+      api = os.environ["CI_API_V4_URL"]
+      project = urllib.parse.quote(os.environ["TEAM_STANDARDS_PROJECT"], safe="")
+      token = os.environ["TEAM_BOT_TOKEN"]
+      ref = urllib.parse.quote(os.environ.get("TEAM_STANDARDS_REF") or "main", safe="")
+      cafile = os.environ.get("INTERNAL_CA_CERT") or os.environ.get("CI_SERVER_TLS_CA_FILE") or None
+      context = ssl.create_default_context(cafile=cafile)
+      dest = pathlib.Path(os.environ["CI_PROJECT_DIR"], ".team")
+      dest.mkdir(exist_ok=True)
+      for path in [
+          "plugins/team/rules.md",
+          "plugins/team/ruff.toml",
+          "plugins/team/tool-versions.txt",
+          "pr-agent/pr_agent.toml",
+      ]:
+          url = f"{api}/projects/{project}/repository/files/{urllib.parse.quote(path, safe='')}/raw?ref={ref}"
+          request = urllib.request.Request(url, headers={"PRIVATE-TOKEN": token})
+          with urllib.request.urlopen(request, timeout=30, context=context) as response:
+              (dest / pathlib.Path(path).name).write_bytes(response.read())
+          print("取得:", path)
+      PY
+
+# MR で変更した .py ファイルだけを確認する(既存コードは、触ったファイルから順にルールに揃っていく)
+lint:
+  stage: check
+  image: $TEAM_PYTHON_IMAGE
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  variables:
+    GIT_DEPTH: "0"
+  before_script:
+    - !reference [.team_fetch, script]
+    - if [ -n "$INTERNAL_CA_CERT" ]; then export PIP_CERT="$INTERNAL_CA_CERT"; fi
+    - pip install -q -r .team/tool-versions.txt
+  script:
+    - |
+      git -c core.quotepath=false diff --name-only --diff-filter=ACMR "$CI_MERGE_REQUEST_DIFF_BASE_SHA" HEAD -- '*.py' > .team/changed.txt
+      if [ ! -s .team/changed.txt ]; then echo "変更された .py ファイルはありません"; exit 0; fi
+      echo "確認するファイル:"; cat .team/changed.txt
+      xargs -d '\n' ruff format --check --config .team/ruff.toml < .team/changed.txt
+      xargs -d '\n' ruff check --config .team/ruff.toml < .team/changed.txt
+
+test:
+  stage: check
+  image: $TEAM_PYTHON_IMAGE
+  before_script:
+    - !reference [.team_fetch, script]
+    - if [ -n "$INTERNAL_CA_CERT" ]; then export PIP_CERT="$INTERNAL_CA_CERT"; fi
+    - pip install -q -r .team/tool-versions.txt
+    - if [ -f requirements.txt ]; then pip install -q -r requirements.txt; fi
+  script:
+    # テストがまだ1つも無いツール(pytest の終了コード5)は、失敗扱いにしない
+    - python -m pytest -q -p no:cacheprovider || [ $? -eq 5 ]
+
+# AI レビュー。AI_REVIEW_MODEL が登録されていなければ実行しない(LLM を使えない環境でも CI は動く)
+ai_review:
+  stage: review
+  needs: []               # lint/test の結果を待たずに並行実行する
+  allow_failure: true     # LLM が落ちていてもマージは止めない
+  image:
+    name: $TEAM_PR_AGENT_IMAGE
+    entrypoint: [""]
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $AI_REVIEW_MODEL
+  script:
+    - !reference [.team_fetch, script]
+    # チーム共通の AI レビュー方針と、チーム共通ルール(レビューの基準として渡す)
+    - export PR_AGENT_EXTRA_CONFIG_URL="$CI_PROJECT_DIR/.team/pr_agent.toml"
+    - export GITHUB_WORKSPACE="$CI_PROJECT_DIR"
+    - export ARTIFACT_PATH="$CI_PROJECT_DIR/.team/rules.md"
+    # GitLab への接続
+    - export MR_URL="$CI_MERGE_REQUEST_PROJECT_URL/merge_requests/$CI_MERGE_REQUEST_IID"
+    - export config__git_provider="gitlab"
+    - export gitlab__url="$CI_SERVER_URL"
+    - export gitlab__PERSONAL_ACCESS_TOKEN="$TEAM_BOT_TOKEN"
+    - if [ -n "$CI_SERVER_TLS_CA_FILE" ]; then export gitlab__SSL_VERIFY="$CI_SERVER_TLS_CA_FILE"; fi
+    - if [ -n "$INTERNAL_CA_CERT" ]; then export SSL_CERT_FILE="$INTERNAL_CA_CERT" REQUESTS_CA_BUNDLE="$INTERNAL_CA_CERT"; fi
+    # 社内 LLM API(OpenAI 互換)への接続。モデル名は "openai/<モデル名>" の形式
+    - export openai__api_base="$AI_REVIEW_API_BASE"
+    - export openai__key="$AI_REVIEW_API_KEY"
+    - export config__model="$AI_REVIEW_MODEL"
+    - export config__fallback_models="[\"$AI_REVIEW_MODEL\"]"
+    - export config__custom_model_max_tokens="${AI_REVIEW_MAX_TOKENS:-128000}"
+    - cd /app
+    - python -m pr_agent.cli --pr_url="$MR_URL" review
+    - python -m pr_agent.cli --pr_url="$MR_URL" improve

@@ -1,68 +1,25 @@
-# MRごとに「lint → test」と「AIレビュー」を実行する。
-# 必要なCI変数(グループ単位で一度設定すれば全リポジトリで使える)は、
-# テンプレートリポジトリ team-dev-template の docs/ROLLOUT.md を参照。
-
-variables:
-  # 社内でDocker Hubに出られない場合は、社内レジストリのイメージに差し替える
-  PYTHON_IMAGE: "python:3.12-slim"
-  PR_AGENT_IMAGE: "pragent/pr-agent:latest"   # 安定したら特定バージョンに固定する
-  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
-
-workflow:
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+# チーム標準リポジトリ自身の CI。ここを変える MR が、全ツールを壊さないかを確かめる。
+# (各ツール向けの CI 定義は ci/python-tool.yml。こちらとは別物)
 
 stages:
   - check
-  - review
 
-.python:
-  image: $PYTHON_IMAGE
-  cache:
-    paths: [.cache/pip]
-  before_script:
-    - pip install -q -r requirements-dev.txt
-
-lint:
-  extends: .python
+check:
   stage: check
-  script:
-    - ruff format --check .
-    - ruff check .
-
-test:
-  extends: .python
-  stage: check
-  script:
-    # テストがまだ1つも無い既存ツール(pytest の終了コード5)は、失敗扱いにしない
-    - pytest -q || [ $? -eq 5 ]
-
-ai_review:
-  stage: review
-  needs: []               # lint/test の結果を待たずに並行実行する
-  allow_failure: true     # LLMが落ちていてもマージは止めない
-  image:
-    name: $PR_AGENT_IMAGE
-    entrypoint: [""]
+  # git が入ったイメージを使う(テストで git を使うため)。社内レジストリを使う場合は書き換える
+  image: python:3.12
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  before_script:
+    - pip install -q -r plugins/team/tool-versions.txt pyyaml
   script:
-    - cd /app
-    - export MR_URL="$CI_MERGE_REQUEST_PROJECT_URL/merge_requests/$CI_MERGE_REQUEST_IID"
-    # GitLab への接続
-    - export config__git_provider="gitlab"
-    - export gitlab__url="$CI_SERVER_URL"
-    - export gitlab__PERSONAL_ACCESS_TOKEN="$AI_REVIEW_GITLAB_TOKEN"
-    - if [ -n "$CI_SERVER_TLS_CA_FILE" ]; then export gitlab__SSL_VERIFY="$CI_SERVER_TLS_CA_FILE"; fi
-    # 社内LLM APIが社内CAの証明書を使う場合: File型のCI変数 INTERNAL_CA_CERT に証明書を登録する
-    - if [ -n "$INTERNAL_CA_CERT" ]; then export SSL_CERT_FILE="$INTERNAL_CA_CERT" REQUESTS_CA_BUNDLE="$INTERNAL_CA_CERT"; fi
-    # 社内LLM API(OpenAI互換)への接続。モデル名は "openai/<モデル名>" の形式
-    - export openai__api_base="$AI_REVIEW_API_BASE"
-    - export openai__key="$AI_REVIEW_API_KEY"
-    - export config__model="$AI_REVIEW_MODEL"
-    - export config__fallback_models="[\"$AI_REVIEW_MODEL\"]"
-    - export config__custom_model_max_tokens="${AI_REVIEW_MAX_TOKENS:-128000}"
-    # レビュー実行
-    - python -m pr_agent.cli --pr_url="$MR_URL" review
-    - python -m pr_agent.cli --pr_url="$MR_URL" improve
+    # スクリプト類が、チーム共通の ruff 設定に合っているか
+    - ruff format --check --config plugins/team/ruff.toml .
+    - ruff check --config plugins/team/ruff.toml .
+    # フック・CI スクリプト・管理スクリプト・ファイル同士の整合性のテスト
+    - python -m pytest -q -p no:cacheprovider tests
+    # ひな形のサンプルツールが動くか
+    - cd plugins/team/templates/tool
+    - pip install -q -r requirements.txt
+    - python -m pytest -q -p no:cacheprovider

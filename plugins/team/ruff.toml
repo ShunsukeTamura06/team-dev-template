@@ -1,0 +1,7 @@
+# チーム共通の ruff 設定。CI(ci/python-tool.yml)と、Claude Code の編集後フックの両方がこのファイルを使う。
+line-length = 100
+target-version = "py311"
+
+[lint]
+# E/W: 基本スタイル  F: 未使用・未定義  I: import順  B: バグになりやすい書き方  UP: 古い書き方
+select = ["E", "W", "F", "I", "B", "UP"]

@@ -1,7 +1,0 @@
-# テンプレートを導入したGitLabプロジェクトを、1行に1つ「グループ名/プロジェクト名」で書く。
-# 書き方はGitLabのプロジェクトURLの、ドメインより後ろの部分(例: https://gitlab.example.local/my-group/bond-reconcile)。
-# 行頭が # の行は無視される。
-#
-# 例:
-# my-group/bond-reconcile
-# my-group/equity-report

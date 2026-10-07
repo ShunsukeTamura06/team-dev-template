@@ -1,0 +1,7 @@
+# チーム標準の CI(lint・test・AIレビュー)を使う。中身はチーム標準リポジトリの ci/python-tool.yml にある。
+# このファイルは原則として変更しない。CI の変更はチーム標準リポジトリで行い、全ツールに一度に反映する。
+# このツールだけのジョブを足す場合は、この下に書く(stage は check か review を使う)。
+include:
+  - project: $TEAM_STANDARDS_PROJECT
+    ref: main
+    file: /ci/python-tool.yml

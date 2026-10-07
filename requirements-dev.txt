@@ -1,4 +1,0 @@
--r requirements.txt
-# ruff はバージョンを固定する(CIとローカルで整形結果を揃えるため)
-ruff==0.16.10
-pytest>=8.0

@@ -1,361 +1,287 @@
 # 導入手順書
 
-このテンプレートを社内に導入するための手順書です。最初に一度だけ行います。
-導入後の日々の使い方は [OPERATIONS.md](OPERATIONS.md) を参照してください。
+この手順書は、チーム標準を社内に導入するときに**1回だけ**行う作業を、順番に書いたものです。
+導入後の日々の作業や、ルールを変えるときの作業は [OPERATIONS.md](OPERATIONS.md) を見てください。
 
-## 登場する人(役割)
+## 登場する人と言葉
 
-1人が複数の役割を兼ねても構いません。手順を始める前に、それぞれ誰が担当するかを決めてください。
-
-| 役割 | やること | 必要なGitLab権限 |
+| 呼び方 | 誰か | この手順で必要な権限 |
 |---|---|---|
-| **推進担当** | 導入全体を進める。事前確認、テンプレートの持ち込み、動作確認 | グループの Owner |
-| **チーフ** | チーム共通ルール(AGENTS.md)の内容を決める | グループの Maintainer 以上 |
-| **ツール作者** | 自分が担当するツールにテンプレートを入れる | 担当ツールのプロジェクトの Maintainer 以上 |
-| **エンジニア全員** | 自分のPCの Claude Code の設定を整える | — |
+| 推進担当 | 導入を進める人(1名) | 対象グループの Owner(グループの CI 変数・アクセストークンを作るため) |
+| チーフ | チーム共通ルールの承認者 | 中央リポジトリの Maintainer |
+| メンバー | チームの開発者全員(推進担当・チーフを含む) | 対象グループの Developer 以上 |
 
-「グループ」とは、各ツールのGitLabプロジェクトをまとめているGitLabのグループのことです。
-ツールのプロジェクトが1つのグループにまとまっていない場合は、先に1つのグループへ移すと、以降の設定が一度で済みます。
+| 言葉 | 意味 |
+|---|---|
+| 対象グループ | 各ツールのプロジェクトがまとまっている社内 GitLab のグループ。以下、例として `my-group` と書く |
+| 中央リポジトリ | このリポジトリ。社内 GitLab の `my-group/team-dev-template` に置く |
+| ツールのリポジトリ | 各業務ツールのプロジェクト(例:`my-group/bond-reconcile`) |
+| `<GitLab>` | 社内 GitLab のアドレス(例:`https://gitlab.example.local`) |
 
-## 全体の流れ
+## 全体の流れと所要時間の目安
 
-| 段階 | 内容 | 担当 |
-|---|---|---|
-| 0 | 事前確認 | 推進担当 |
-| 1 | テンプレートを社内GitLabに置く | 推進担当 |
-| 2 | 共通ルール v1 を決める | チーフ |
-| 3 | GitLabグループを設定する | 推進担当 |
-| 4 | 1つのツールで試す | ツール作者・推進担当 |
-| 5 | 残りのツールに広げる | 各ツール作者・推進担当 |
-| 6 | 各自のPCを整える | エンジニア全員 |
+| 段階 | 誰が | 何をするか | 目安 |
+|---|---|---|---|
+| 0 | 推進担当 | 事前に確認すること | 社内調整次第 |
+| 1 | 推進担当 | 中央リポジトリを社内 GitLab に置く | 30分 |
+| 2 | チーフ | チーム共通ルールの初版を決める | 1時間 |
+| 3 | 推進担当 | 対象グループに CI 変数を登録する | 30分 |
+| 4 | メンバー全員 | 自分の PC に Claude Code のプラグインを入れる | 1人15分 |
+| 5 | 推進担当と1名 | 1つのツールで試す | 半日 |
+| 6 | 各ツールの担当者 | 残りのツールに広げる(急がない) | 1ツール30分 |
+
+各ツールのリポジトリで行う作業は、段階5・6の「`/team:adopt` の実行」と「main ブランチの保護」だけです(ツールのプロジェクトが対象グループの中(サブグループを含む)にあることが前提です。グループの外にあると、段階3の CI 変数が届きません。外にあるツールは、先にプロジェクトを対象グループへ移すか、段階3の変数をそのプロジェクトにも登録します)。
+ルールや CI の設定を各ツールに写す作業はありません([DESIGN.md](DESIGN.md) を参照)。
 
 ---
 
-## 段階0 事前確認
+## 段階0:事前に確認すること(推進担当)
 
-**推進担当が**、次の4点を確認します。答えによって後の手順が変わるので、必ず先に行ってください。
+次の5点を確認します。1つでも「いいえ」なら、括弧内の対応をしてから進みます。
 
-### 0-1 作成者以外の承認が必要か
-
-- **誰に聞くか**:EUC管理・システムリスク管理の規程を所管する部署
-- **何を聞くか**:「担当部署で開発している業務ツールの変更を本番に反映するとき、作成者以外の承認が必要か」
-- **答えが「必要」の場合**:段階3の後に、各ツールのプロジェクトで「承認者1名を必須」にする設定を追加します(GitLab の Settings → Merge requests → Merge request approvals)。承認者は、AIレビューの結果を見たうえで概要を確認して承認します。
-
-### 0-2 ソースコードを社内LLM APIに送ってよいか
-
-- **誰に聞くか**:社内LLM APIを管理している部署
-- **何を聞くか**:「業務ツールのソースコード(顧客情報は含まない)を、自動レビューのためにLLM APIへ送ってよいか」
-- **答えが「不可」の場合**:AIレビューは使えません。段階3の CI変数を登録せず、`.gitlab-ci.yml` の `ai_review` ジョブを削除して導入します(ルールの統一と lint・test は有効です)。
-
-### 0-3 GitLab の Runner が使えるか
-
-- **誰に聞くか**:社内GitLabの管理者(インフラ担当)
-- **何を聞くか**:
-  1. 対象グループのプロジェクトで使える Runner があり、その種類(executor)が **docker** か
-  2. その Runner から次の3つに接続できるか:Docker Hub(イメージの取得)、PyPI(Pythonライブラリの取得)、社内LLM API
-- **Docker Hub に出られない場合**:管理者に `python:3.12-slim` と `pragent/pr-agent:latest` を社内のコンテナレジストリへ登録してもらいます。登録先のイメージ名を控えておき、段階1-4で使います。
-- **PyPI に出られない場合**:社内のPyPIミラーのURLを控えておき、段階3-3で CI変数 `PIP_INDEX_URL` として登録します。
-
-### 0-4 社内PCの Python のバージョン
-
-- **誰に聞くか**:エンジニア全員(自分のPCで `python --version` を実行してもらう)
-- **使い道**:CIで使う Python のバージョンを、社内PCとそろえます。社内PCの Python が 3.12 ではない場合は、段階1-4でテンプレートの設定を書き換えます。
+| # | 確認すること | 確認先 | 「いいえ」のとき |
+|---|---|---|---|
+| 0-1 | MR のコード差分を社内 LLM API に送ってよいか | 社内 LLM API の管理部署・内部統制の担当 | AI レビューを使わずに進める(段階3の `AI_REVIEW_MODEL` を登録しなければ、AI レビューは動かない) |
+| 0-2 | 社内 GitLab の Runner が使えるか。Docker で動く Runner か | GitLab の管理者 | Runner の用意を依頼する(Docker で動くこと、社内 GitLab と社内 LLM API に接続できること) |
+| 0-3 | Runner が `python:3.12` と `pragent/pr-agent` のイメージを取得できるか(`python:3.12` は git 入りのイメージ。git が無い `-slim` 版は使えない) | GitLab の管理者 | git と Python 3.11 以上が入ったイメージを社内レジストリに置いてもらい、段階1-5でイメージ名を書き換える |
+| 0-4 | Runner が `pip install` できるか(社内 PyPI ミラーがあるか) | GitLab の管理者 | 社内ミラーのアドレスを聞き、段階3で `PIP_INDEX_URL` に登録する |
+| 0-5 | メンバーの PC から `git clone <GitLab>/my-group/...` ができるか(HTTPS、認証情報を保存済み) | 各メンバー | Git for Windows を入れ、一度 clone して認証情報を保存しておく |
 
 ---
 
-## 段階1 テンプレートを社内GitLabに置く
+## 段階1:中央リポジトリを社内 GitLab に置く(推進担当)
 
-**推進担当が**行います。
+### 1-1. 中身を社内に持ち込む
 
-### 1-1 テンプレートを社内に持ち込む
+1. インターネットに接続できる端末で、このリポジトリの GitHub のページを開く
+2. 緑色の「Code」ボタン →「Download ZIP」を押し、ZIP ファイルを保存する
+3. 社内の所定の手続き(外部ファイルの持ち込み申請など)に従い、ZIP ファイルを自分の業務 PC に移す
+4. 業務 PC で ZIP ファイルを展開する。展開したフォルダの名前を `team-dev-template` に変える
 
-1. **推進担当が**、社外のPCで https://github.com/ShunsukeTamura06/team-dev-template を開き、緑色の **Code** ボタン → **Download ZIP** でダウンロードする
-2. **推進担当が**、社内の外部ファイル持ち込み手順(申請など)に従って、ZIP を社内PCへ移す
-3. **推進担当が**、社内PCで ZIP を展開する。展開したフォルダ名を `team-dev-template` にする
+### 1-2. 社内 GitLab に空のプロジェクトを作る
 
-### 1-2 社内GitLabにプロジェクトを作る
+1. ブラウザで `<GitLab>` を開き、対象グループ(`my-group`)のページを開く
+2. 右上の「新規プロジェクト」を押す →「空のプロジェクトの作成」を押す
+3. 次のとおり入力して「プロジェクトを作成」を押す
+   - プロジェクト名:`team-dev-template`
+   - プロジェクト URL:対象グループ(`my-group`)が選ばれていること
+   - 表示レベル:「プライベート」
+   - 「リポジトリを初期化し README ファイルを生成する」:**チェックを外す**
 
-1. **推進担当が**、ブラウザで社内GitLabを開き、ツールのプロジェクトがあるグループを開く
-2. **推進担当が**、画面右上の **New project(新規プロジェクト)** → **Create blank project(空のプロジェクトを作成)** を選ぶ
-3. **推進担当が**、次のとおり入力して **Create project** を押す
-   - Project name:`team-dev-template`
-   - Visibility Level:**Private**
-   - **Initialize repository with a README のチェックを外す**(外さないと、次の手順の push が失敗します)
+> 対象グループのメンバー全員が、このプロジェクトを読める必要があります(各ツールの CI がここを参照するため)。対象グループの中に作れば、グループのメンバーは自動的に読めます。
 
-### 1-3 テンプレートを push する
+### 1-3. 中身を push する
 
-**推進担当が**、社内PCで `team-dev-template` フォルダを開いたターミナルから、次を実行します。
-`<プロジェクトのURL>` は、1-2で作ったプロジェクトの画面の **Code → Clone with HTTPS** に表示される URL です。
+業務 PC のコマンドプロンプト(または PowerShell)で、展開したフォルダに移動して実行します。
 
 ```
+cd team-dev-template
 git init -b main
 git add .
-git commit -m "テンプレートを追加"
-git remote add origin <プロジェクトのURL>
+git commit -m "チーム標準の初版"
+git remote add origin <GitLab>/my-group/team-dev-template.git
 git push -u origin main
 ```
 
-**確認**:**推進担当が**、ブラウザでプロジェクトを再読み込みし、`AGENTS.md` などのファイルが表示されることを確認します。
+確認:ブラウザで `my-group/team-dev-template` を開き、`plugins` や `ci` のフォルダが表示されること。
 
-### 1-4 社内環境に合わせて書き換える(必要な場合のみ)
+### 1-4. 中央リポジトリの CI が通ることを確認する
 
-段階0の答えによって、**推進担当が**次のファイルを書き換え、commit して push します。
+1. `my-group/team-dev-template` の左メニュー「ビルド」→「パイプライン」を開く
+2. 一番上のパイプラインが「成功」になるまで待つ(push で自動的に始まる)
 
-| 段階0の答え | 書き換えるファイル | 書き換える内容 |
+失敗した場合は、ジョブを開いてログを確認します。よくある原因は段階0-2〜0-4(Runner・イメージ・pip)です。
+
+### 1-5. (必要な場合だけ)イメージ名を社内用に書き換える
+
+段階0-3で社内レジストリを使うことになった場合だけ、次の2つのファイルのイメージ名を書き換え、MR を作ってマージします。
+
+- 中央リポジトリ自身の CI:`.gitlab-ci.yml` の `image: python:3.12`
+- 全ツール共通の CI:`ci/python-tool.yml` の次の2行
+
+```yaml
+  TEAM_PYTHON_IMAGE: "python:3.12"
+  TEAM_PR_AGENT_IMAGE: "pragent/pr-agent:latest"
+```
+
+### 1-6. 中央リポジトリの main ブランチを保護する
+
+中央リポジトリの変更は全ツールに効くため、マージできる人をチーフ(と推進担当)に限ります。
+
+1. `my-group/team-dev-template` の左メニュー「管理」→「メンバー」で、チーフと推進担当のロールを `Maintainer` にする(他のメンバーは、グループから引き継いだ `Developer` のまま)
+2. 段階5-4の 1〜3 と同じ準備をしたうえで、次を実行する
+
+   ```
+   python admin/gitlab_admin.py protect my-group/team-dev-template --merge-level maintainer
+   ```
+
+確認:「設定」→「リポジトリ」→「保護ブランチ」で、`main` の「マージを許可」が `Maintainers` になっていること。
+これで、他のメンバーは中央リポジトリに MR を作れますが、マージはチーフ(または推進担当)だけができます。
+
+---
+
+## 段階2:チーム共通ルールの初版を決める(チーフ)
+
+1. `my-group/team-dev-template` の `plugins/team/rules.md` を開いて読む
+2. 変えたい点があれば、右上の「編集」→「Web IDE で開く」で直す
+3. 左の「ソース管理」で、ブランチ名を新しく付けて(例:`rules-v1`)コミットし、MR を作ってマージする
+
+判断の目安:ルールは10項目前後に保ちます。迷うものは入れずに始め、運用しながら足します。
+
+---
+
+## 段階3:対象グループに CI 変数を登録する(推進担当)
+
+### 3-1. ボット用のトークンを作る
+
+CI が中央リポジトリのファイルを読み、AI レビューが MR にコメントするためのトークンです。
+
+1. 対象グループ(`my-group`)のページで、左メニュー「設定」→「アクセストークン」を開く
+2. 「新しいトークンを追加」を押し、次のとおり入力して「グループアクセストークンを作成」を押す
+   - トークン名:`team-bot`(AI レビューのコメントの投稿者名として表示される)
+   - 有効期限:社内規程の上限(最長1年)。**期限日を、推進担当の予定表に登録しておく**
+   - ロール:`Developer`
+   - スコープ:`api`
+3. 表示されたトークン(`glpat-` で始まる文字列)をコピーする。**この画面を閉じると二度と表示されない**
+
+### 3-2. CI 変数を登録する
+
+対象グループのページで、左メニュー「設定」→「CI/CD」→「変数」の「展開」→「変数を追加」で、次を1つずつ登録します。
+
+| キー | 値 | 表示レベル | 「変数の保護」 |
+|---|---|---|---|
+| `TEAM_STANDARDS_PROJECT` | `my-group/team-dev-template` | 表示 | **オフ** |
+| `TEAM_BOT_TOKEN` | 3-1でコピーしたトークン | マスク | **オフ** |
+| `AI_REVIEW_API_BASE` | 社内 LLM API のアドレス(例:`https://llm.example.local/v1`) | 表示 | **オフ** |
+| `AI_REVIEW_API_KEY` | 社内 LLM API のキー | マスク | **オフ** |
+| `AI_REVIEW_MODEL` | `openai/` + モデル名(例:`openai/gpt-4o`) | 表示 | **オフ** |
+| `AI_REVIEW_MAX_TOKENS` | モデルの最大トークン数(不明なら登録しない。既定は 128000) | 表示 | **オフ** |
+| `PIP_INDEX_URL`(段階0-4で必要な場合だけ) | 社内 PyPI ミラーのアドレス | 表示 | **オフ** |
+| `INTERNAL_CA_CERT`(社内 CA の証明書が必要な場合だけ) | 証明書の中身。**タイプは「ファイル」** | 表示 | **オフ** |
+
+- 「変数の保護」をオフにする理由:オンにすると、保護されたブランチ(main)以外では使えなくなり、MR のパイプラインで読めないため
+- 段階0-1で「送ってはいけない」となった場合は、`AI_REVIEW_` で始まる4つを登録しない
+
+---
+
+## 段階4:自分の PC に Claude Code のプラグインを入れる(メンバー全員、各自)
+
+各自の PC で1回だけ行います。以後、チーム標準の変更は自動で届きます。
+
+### 4-1. プラグインを入れる
+
+コマンドプロンプト(または PowerShell)で実行します。
+
+```
+claude plugin marketplace add <GitLab>/my-group/team-dev-template.git
+claude plugin install team@team-dev
+```
+
+確認:2つとも `Successfully` と表示されること。
+認証エラーになる場合は、段階0-5(`git clone` で認証情報を保存)を先に行います。
+
+### 4-2. 初期設定を実行する
+
+1. 任意のフォルダで `claude` を起動する
+2. `/team:setup` と入力して Enter を押す
+3. 表示に従う。Claude Code が次を行う
+   - プラグインの自動更新を有効にする
+   - チーム指定のバージョンの ruff と pytest を入れる
+   - 個人の `~/.claude/CLAUDE.md` に、チーム共通ルールと重複・矛盾する行があれば、整理を提案する(了承するまで変更しない)
+4. Claude Code を終了して、もう一度起動する
+
+確認:起動時に「ruff のバージョンが違います」「自動更新が有効になっていません」という警告が出ないこと。
+
+### 4-3. (自分のツールで以前の方式を使っていた人だけ)
+
+各ツールのリポジトリにある `AGENTS.md`・`.claude/CLAUDE.md` などは、段階5・6の `/team:adopt` で仕分けます。ここでは何もしません。
+
+---
+
+## 段階5:1つのツールで試す(推進担当と、試すツールの担当者)
+
+### 5-1. 試すツールを選ぶ(推進担当)
+
+条件:担当者が協力的で、改修の予定があり、本番データを書き換えないツール。
+
+### 5-2. チーム標準を導入する(試すツールの担当者)
+
+1. 自分の PC で、そのツールのリポジトリのフォルダを開き、`git switch main` → `git pull` を実行する
+2. そのフォルダで `claude` を起動し、`/team:adopt` と入力する
+3. Claude Code の質問に答える。Claude Code が次を行う
+   - 既存の `CLAUDE.md`・`AGENTS.md` などを仕分ける(チーム共通ルールの候補は一覧にして出す → チーフに渡す)
+   - `.gitlab-ci.yml`(共通 CI の参照)と `CLAUDE.md`・MR のひな形などを置く
+   - README を、ひな形の見出しに沿って書く(分からないことは質問される)
+4. 最後に表示される手順に従い、commit・push して MR を作る
+
+### 5-3. MR を確認してマージする(試すツールの担当者)
+
+MR の画面で、次がすべて満たされることを確認します。
+
+| 確認すること | 見る場所 | 満たされないとき |
 |---|---|---|
-| Docker Hub に出られない | `.gitlab-ci.yml` | `PYTHON_IMAGE` と `PR_AGENT_IMAGE` を社内レジストリのイメージ名にする |
-| 社内PCの Python が 3.12 ではない | `.gitlab-ci.yml` | `PYTHON_IMAGE` を `python:<バージョン>-slim` にする |
-| 社内PCの Python が 3.11 より古い | `pyproject.toml` | `target-version` を `"py310"` などそのバージョンにする |
-| LLM APIへの送信が不可 | `.gitlab-ci.yml` | `ai_review:` から最後の行までを削除する |
+| パイプラインに `lint`・`test`・`ai_review` の3つのジョブがある | MR の「パイプライン」タブ | `.gitlab-ci.yml` の `include` と、CI 変数 `TEAM_STANDARDS_PROJECT` を確認 |
+| `lint` と `test` が成功 | 同上 | ジョブのログを確認 |
+| AI レビューのコメントが日本語で付き、チーム共通ルールの番号を挙げている | MR の「概要」タブのコメント | `ai_review` のログを確認(LLM の接続先・モデル名・トークン) |
+
+確認できたらマージします。
+
+### 5-4. main ブランチを保護する(推進担当)
+
+main への直接 push を禁止し、パイプラインが成功した MR だけをマージできるようにします。
+
+1. 推進担当の PC で、中央リポジトリを clone する(初回だけ)
+
+   ```
+   git clone <GitLab>/my-group/team-dev-template.git
+   cd team-dev-template
+   ```
+
+2. 自分の GitLab アカウントで個人アクセストークンを作る(初回だけ)
+   - `<GitLab>` 右上の自分のアイコン →「設定」→「アクセストークン」→「新しいトークンを追加」
+   - スコープ:`api`、有効期限:短め(例:1週間)
+3. PowerShell で次を実行する(トークンは2でコピーしたもの)
+
+   ```
+   $env:GITLAB_URL = "<GitLab>"
+   $env:GITLAB_TOKEN = "glpat-..."
+   python admin/gitlab_admin.py protect my-group/<試したツールのプロジェクト名> --dry-run
+   python admin/gitlab_admin.py protect my-group/<試したツールのプロジェクト名>
+   ```
+
+   1行目の `--dry-run` で予定の内容を確認し、2行目で実行します。`[OK]` と表示されれば完了です。
+   中央リポジトリがまだなら、段階1-6 の手順で(`--merge-level maintainer` を付けて)別に実行します。
+
+確認:そのツールのプロジェクトの「設定」→「リポジトリ」→「保護ブランチ」で、`main` が「プッシュとマージを許可:No one」「マージを許可:Developers + Maintainers」になっていること。
+
+### 5-5. 2週間使ってみる(全員)
+
+普段どおり開発し、気づいたことを [OPERATIONS.md](OPERATIONS.md) の手順で中央リポジトリに反映します(ルールの言い回し、AI レビューの指摘の多さなど)。
 
 ---
 
-## 段階2 共通ルール v1 を決める
+## 段階6:残りのツールに広げる(各ツールの担当者、推進担当)
 
-**チーフが**行います。段階4より前に終わらせてください(ツールに配るのは、この時点の AGENTS.md です)。
+急いで全ツールに入れる必要はありません。**次にそのツールを改修するときに**、段階5-2〜5-4を行います。
 
-1. **チーフが**、エンジニア全員から、各自が今使っている `CLAUDE.md` / `AGENTS.md`(各ツールのリポジトリにあるもの、自分のPCの `~/.claude/CLAUDE.md` の両方)を集める
-2. **チーフが**、集めた内容のうち「チーム全員が守るべき書き方のルール」を選び、テンプレートの `AGENTS.md` に反映する
-   - **ルールは合計10個前後に抑えます**。多すぎると、AIレビューの指摘が増えて読まれなくなります
-   - そのツールだけの情報(業務の理由・入出力など)は、ここには入れません。段階4で各ツールの README に移します
-3. **チーフが**、変更を `team-dev-template` プロジェクトへの MR として出し、エンジニア全員に内容を確認してもらってからマージする
+- 担当者:そのツールで `/team:adopt` → MR → マージ
+- 推進担当:`python admin/gitlab_admin.py protect my-group/<プロジェクト名>`(複数をまとめて指定できる)
 
----
-
-## 段階3 GitLabグループを設定する
-
-**推進担当が**行います。グループの Owner 権限が必要です。
-
-### 3-1 AIレビュー用のトークンを作る
-
-1. **推進担当が**、GitLabでツールのグループを開き、左のサイドバーで **Settings(設定)→ Access tokens(アクセストークン)** を開く
-2. **推進担当が**、**Add new token(新しいトークンを追加)** を押し、次のとおり入力して **Create group access token** を押す
-   - Token name:`ai-review`
-   - Expiration date:1年後の日付(上限は通常1年)
-   - Select a role:**Developer**
-   - Select scopes:**api** にチェック
-3. **推進担当が**、画面に表示されたトークンをコピーし、3-3 で使う。**この画面を閉じると二度と表示されません**
-4. **推進担当が**、有効期限の1か月前に予定表へ「ai-review トークンの更新」を登録する(期限が切れると AIレビューが止まります)
-
-### 3-2 社内LLM APIの情報をそろえる
-
-**推進担当が**、社内LLM APIの管理部署から次の3つを入手します。
-
-- API の URL(OpenAI互換の形式で、通常 `/v1` で終わるもの)
-- API キー
-- 使うモデルの名前
-
-### 3-3 CI変数を登録する
-
-1. **推進担当が**、グループの **Settings → CI/CD** を開き、**Variables(変数)** の欄の **Expand(展開)** を押す
-2. **推進担当が**、**Add variable(変数を追加)** を押し、下の表の変数を1つずつ登録する。表に指定が無いかぎり、次のとおりにする
-   - Type:**Variable**
-   - Environments:**All (default)**
-   - **Protect variable:チェックを外す**(付けると、保護されていないブランチのMRで変数が読めず、AIレビューが動きません)
-
-| Key | Value | Mask variable |
-|---|---|---|
-| `AI_REVIEW_GITLAB_TOKEN` | 3-1 でコピーしたトークン | チェックする |
-| `AI_REVIEW_API_BASE` | 社内LLM APIの URL | — |
-| `AI_REVIEW_API_KEY` | 社内LLM APIのキー | チェックする |
-| `AI_REVIEW_MODEL` | `openai/` + モデル名(例:モデル名が `claude-sonnet` なら `openai/claude-sonnet`) | — |
-| `AI_REVIEW_MAX_TOKENS` | モデルが受け付ける最大入力トークン数。分からなければ登録しない(128000 が使われる) | — |
-| `PIP_INDEX_URL` | 段階0-3 で控えた社内PyPIミラーのURL。PyPIに出られる場合は登録しない | — |
-| `INTERNAL_CA_CERT` | 社内LLM APIが社内CAの証明書を使う場合のみ。**Type を File にして**、Value に証明書(PEM形式)の中身を貼る | — |
-
-**注意**:`AI_REVIEW_MODEL` の先頭の `openai/` は、モデル名に関係なく必ず付けます。付け忘れると AIレビューが「モデルが見つからない」で失敗します。
+新しく作るツールは、最初から `/team:new-tool` で作ります([OPERATIONS.md](OPERATIONS.md) の「新しいツールを作る」)。
 
 ---
 
-## 段階4 1つのツールで試す
+## うまくいかないとき
 
-最初は1つのツールだけで行い、問題が出たら直してから段階5に進みます。
-試すツールは、小さくて、作者がすぐ対応できるものを選んでください。
-
-### 4-1 テンプレートを入れる
-
-**ツール作者が**、自分のPCで行います。
-
-1. **ツール作者が**、`team-dev-template` を、試すツールのリポジトリと同じ親フォルダに clone する
-
-   ```
-   (例)
-   C:\work\team-dev-template\     ← テンプレート
-   C:\work\bond-reconcile\        ← 試すツール
-   ```
-
-2. **ツール作者が**、試すツールのリポジトリで新しいブランチを作る
-
-   ```
-   cd C:\work\bond-reconcile
-   git switch main
-   git pull
-   git switch -c adopt-team-template
-   ```
-
-3. **ツール作者が**、同じフォルダで、テンプレートも読めるように Claude Code を起動する
-
-   ```
-   claude --add-dir ..\team-dev-template
-   ```
-
-4. **ツール作者が**、Claude Code に次の文章をそのまま貼り付けて依頼する
-
-   ```
-   ../team-dev-template のテンプレートを、このリポジトリに導入してください。
-   手順は ../team-dev-template/docs/ROLLOUT.md の「4-1で Claude Code が行う作業」に従ってください。
-   業務の背景など、コードから分からないことは推測せず、私に質問してください。
-   ```
-
-5. **ツール作者が**、Claude Code の質問(このツールが必要な理由、判定ルールの根拠、利用者、過去の障害など)に答える
-6. **ツール作者が**、Claude Code の作業が終わったら、変更されたファイルを一通り目で確認する
-
-#### 4-1で Claude Code が行う作業
-
-(この節は、手順4で Claude Code が読む指示です)
-
-1. このリポジトリに既存の `CLAUDE.md`、`.claude/CLAUDE.md`、`AGENTS.md` があれば読み、内容を次の3つに分けてユーザーに見せる
-   - チーム共通ルールにすべきもの → ファイルには反映せず、一覧にしてユーザーに渡す(ユーザーがチーフに渡す)
-   - このツール固有の情報 → README.md の該当欄に移す
-   - Claude Code への操作上の注意 → 新しい CLAUDE.md の末尾に移す
-2. テンプレートから次のファイルをコピーする。同じ名前のファイルがすでにある場合は、各行の括弧内の扱いに従う
-   - `AGENTS.md`、`CLAUDE.md`(既存のものは置き換える)
-   - `.claude/hooks/`、`.claude/skills/`
-   - `.claude/settings.json`(既存があれば、`permissions.deny` と `hooks` を既存の設定に追加する)
-   - `.gitlab-ci.yml`(既存があれば、上書きせずにユーザーに相談する)
-   - `.pr_agent.toml`、`.gitlab/merge_request_templates/Default.md`
-   - `requirements-dev.txt`
-   - `pyproject.toml` の `[tool.ruff]`・`[tool.ruff.lint]`・`[tool.pytest.ini_options]`(既存の pyproject.toml があれば、その3つの節だけを追加する)
-   - `.gitignore`、`.gitattributes`(既存があれば、足りない行だけを追加する)
-3. `requirements.txt` が無ければ、コードの import から作る。Windows でしか動かないライブラリ(`pywin32`、`xlwings` など)には `; sys_platform == "win32"` を付ける(CI は Linux で動くため)
-4. テストが `tests/` 以外の場所にあれば、`pyproject.toml` の `testpaths` をその場所に合わせる
-5. テンプレートの README.md の見出し構成に沿って、このツールの README.md を作る。コードから分かることは埋め、分からないことはユーザーに質問する
-6. `ruff format .` と `ruff check --fix .` を実行する。残ったエラーは、修正内容をユーザーに見せて了承を得てから直す
-7. `pytest` を実行し、結果をユーザーに伝える(テストが無いことは問題としない)
-8. 変更したファイルの一覧と、手順1の「チーム共通ルールにすべきもの」の一覧を、最後にまとめて表示する
-
-### 4-2 導入のMRを出してマージする
-
-1. **ツール作者が**、変更を commit して push する
-
-   ```
-   git add .
-   git commit -m "チーム開発テンプレートを導入"
-   git push -u origin adopt-team-template
-   ```
-
-2. **ツール作者が**、push後にターミナルに表示される URL を開き、MR を作成する
-3. **ツール作者が**、MR画面の **Pipelines** タブで、`lint` と `test` が成功(緑)していることを確認する。失敗していたら、ジョブを開いてエラーを確認し、Claude Code に直してもらって push し直す
-4. **ツール作者が**、MR をマージする
-
-**注意**:この導入MRでは、AIレビューが日本語にならず、チームルールも参照しません。AIレビューの設定(`.pr_agent.toml`)とルール(`AGENTS.md`)は main ブランチから読まれるため、マージ後の次のMRから効きます。AIレビューの確認は 4-4 で行います。
-
-### 4-3 main ブランチを保護する
-
-**推進担当が**、自分のPCで行います。対象ツールのプロジェクトの Maintainer 権限が必要です。
-
-1. **推進担当が**、自分の GitLab アカウントで個人アクセストークンを作る
-   - 画面右上の自分のアイコン → **Edit profile(プロフィールを編集)** → 左のサイドバーの **Access tokens(アクセストークン)** → **Add new token**
-   - Token name:`team-admin`、Expiration date:1か月後、Select scopes:**api** → **Create personal access token**
-   - 表示されたトークンをコピーする
-2. **推進担当が**、`team-dev-template` の `admin/projects.txt` に、試すツールのプロジェクトを1行追加する
-
-   ```
-   (例) プロジェクトのURLが https://gitlab.example.local/my-group/bond-reconcile の場合
-   my-group/bond-reconcile
-   ```
-
-3. **推進担当が**、`team-dev-template` のフォルダで、PowerShell から次を実行する
-
-   ```
-   $env:GITLAB_URL = "https://gitlab.example.local"      # 社内GitLabのURL
-   $env:GITLAB_TOKEN = "glpat-..."                       # 手順1でコピーしたトークン
-   python admin/gitlab_admin.py protect --dry-run
-   ```
-
-4. **推進担当が**、表示された内容(対象プロジェクトと、設定される内容)が正しいことを確認し、`--dry-run` を外して実行する
-
-   ```
-   python admin/gitlab_admin.py protect
-   ```
-
-5. **推進担当が**、`[OK] my-group/bond-reconcile` と表示されたことを確認し、`admin/projects.txt` の変更を `team-dev-template` に MR で反映する
-
-このスクリプトは、対象プロジェクトに次の2つを設定します。
-
-- **main ブランチの保護**:直接 push は誰もできない / MR からのマージは Developer 以上ができる / 強制 push は禁止
-- **マージの条件**:パイプライン(lint・test)が成功していないとマージできない
-
-**確認**:**推進担当が**、GitLab で対象プロジェクトの **Settings → Repository → Protected branches** を開き、`main` が上記のとおりになっていることを確認します。
-
-### 4-4 AIレビューが動くか確認する
-
-1. **ツール作者が**、試すツールで小さな改修(誤字の修正など)をブランチで行い、MR を出す
-2. **推進担当とツール作者が**、MR画面で次を確認する
-
-| 確認すること | 見る場所 | 正常な状態 |
-|---|---|---|
-| CI が動いた | MR の **Pipelines** タブ | `lint`・`test`・`ai_review` の3つが表示され、`lint`・`test` が緑 |
-| AIレビューが動いた | MR の **Overview** タブのコメント欄 | 「PR Reviewer Guide」と「PR Code Suggestions」のコメントが日本語で付く |
-| ルールが効いている | AIレビューのコメント | AGENTS.md のルール番号に触れた指摘がある(指摘が無い場合もある) |
-| マージ条件が効いている | MR の **Merge** ボタン | パイプライン実行中はマージできない |
-
-3. **ツール作者が**、問題が無ければ MR をマージする
-
-AIレビューのコメントが付かない場合は、`ai_review` ジョブを開いてログを確認し、末尾の「つまずいたとき」を参照してください。
-
----
-
-## 段階5 残りのツールに広げる
-
-1. **各ツール作者が**、自分の担当ツールごとに、段階4-1と4-2を行う
-2. **推進担当が**、導入が終わったツールを `admin/projects.txt` に追加し、段階4-3の手順3〜5を行う(すでに設定したツールに再実行しても問題ありません)
-3. **ツール作者が**、4-1の手順8で表示された「チーム共通ルールにすべきもの」を**チーフに**渡す。**チーフが**必要と判断したものを、[OPERATIONS.md の「チーム共通ルールを変える」](OPERATIONS.md#チーム共通ルールを変える)の手順で反映する
-
-**注意**:main ブランチの保護は、テンプレートを入れ終えたツールだけに行います。テンプレートを入れる前のツールを保護すると、CI が無いのにMRが必須になり、手間だけが増えるためです。
-
----
-
-## 段階6 各自のPCを整える
-
-**エンジニア全員が**、自分のPCで行います。
-
-### 6-1 開発に必要なものを入れる
-
-1. **各エンジニアが**、作業するツールのリポジトリで、次を実行する
-
-   ```
-   python -m venv .venv
-   .venv\Scripts\activate
-   pip install -r requirements-dev.txt
-   ```
-
-2. **各エンジニアが**、`ruff --version` を実行し、バージョンが表示されることを確認する(表示されないと、編集後の自動整形が動きません)
-3. **各エンジニアが**、`python --version` を実行し、Python のバージョンが表示されることを確認する。`python` が見つからず `python3` なら動く場合は、各ツールの `.claude/settings.json` の `"command": "python"` を `"python3"` にする
-
-### 6-2 個人用の CLAUDE.md を整理する
-
-1. **各エンジニアが**、自分のPCの `~/.claude/CLAUDE.md`(Windows では `C:\Users\<ユーザー名>\.claude\CLAUDE.md`)を開く
-2. **各エンジニアが**、中身を次のように仕分ける
-   - 「回答は日本語で」「説明は短めに」のような**個人の好み** → そのまま残す
-   - 命名・構成・エラー処理などの**コーディングのルール** → 個人用ファイルから消す。残したいものは**チーフに**渡す
-
-コーディングのルールを個人用に残すと、Claude Code が個人用とチームのルールの両方を読み、食い違ったときにどちらに従うかが不安定になります。
-
----
-
-## つまずいたとき
-
-| 症状 | 原因 | 対処 |
-|---|---|---|
-| 1-3 の `git push` が `rejected` で失敗する | プロジェクト作成時に README を作った | `git pull --rebase origin main` の後に、もう一度 `git push -u origin main` |
-| `lint` が失敗する | 既存コードが ruff のルールに合っていない | ローカルで `ruff format .` と `ruff check --fix .` を実行して push。残るエラーは Claude Code に直してもらう |
-| `test` の `pip install` が失敗する | Windows 専用ライブラリが入っている、または PyPI に出られない | 4-1 の作業3のとおり `; sys_platform == "win32"` を付ける。または CI変数 `PIP_INDEX_URL` を登録する |
-| ジョブが `pending` のまま動かない | 使える Runner が無い | GitLab管理者に Runner の割り当てを依頼する |
-| ジョブが `pull access denied` などで失敗する | Docker Hub に出られない | 段階1-4のとおり、イメージを社内レジストリのものにする |
-| `ai_review` のログに `401` | `AI_REVIEW_GITLAB_TOKEN` が無効か、期限切れ | 3-1 でトークンを作り直し、CI変数を更新する |
-| `ai_review` のログに `model` や `LLM Provider NOT provided` | `AI_REVIEW_MODEL` の先頭に `openai/` が無い | CI変数を `openai/<モデル名>` に直す |
-| `ai_review` のログに `SSL` や `certificate` | 社内LLM APIの証明書(社内CA)を PR-Agent が知らない | 社内CA証明書(PEM形式)を入手し、3-3 のとおり CI変数 `INTERNAL_CA_CERT` に File型で登録する |
-| `ai_review` は成功するが英語でコメントされる | `.pr_agent.toml` がまだ main に無い | テンプレート導入MRをマージした後の MR から日本語になる |
-| AIレビューの変数が読めない(`openai__key` が空など) | CI変数に Protect variable が付いている | 3-3 のとおり、Protect variable のチェックを外す |
-| 4-3 のスクリプトが `HTTP 403` で失敗する | 推進担当に、そのプロジェクトの Maintainer 権限が無い | プロジェクトの Maintainer に権限を付けてもらう |
+| 症状 | 原因と対処 |
+|---|---|
+| ツールの CI が「Project `...` not found or access denied」で始まらない | `TEAM_STANDARDS_PROJECT` の値の誤り、または MR を作った人が中央リポジトリを読めない。中央リポジトリが対象グループの中にあるか確認する |
+| CI の「取得: ...」の手前で HTTP 401 / 404 | `TEAM_BOT_TOKEN` の誤り・期限切れ。段階3-1からやり直し、変数を更新する |
+| CI の「取得」や `pip install` で証明書のエラー | 社内 CA の証明書を、グループの CI 変数 `INTERNAL_CA_CERT`(タイプ「ファイル」)に登録する(取得・pip・AI レビューのすべてで使われる) |
+| `lint` が「git: not found」で失敗する | イメージに git が入っていない。`ci/python-tool.yml` の `TEAM_PYTHON_IMAGE` を git 入りのイメージにする(段階1-5) |
+| `ai_review` が表示されない | `AI_REVIEW_MODEL` が未登録、または「変数の保護」がオン |
+| `ai_review` が失敗する(マージは止まらない) | ログで LLM への接続エラーを確認。モデル名が `openai/` で始まっているか確認 |
+| `lint` が、触っていない古いファイルで失敗する | 起きない設計(MR で変更したファイルだけ確認する)。起きた場合は MR の差分に含まれていないか確認 |
+| Claude Code でチーム共通ルールが効いていない | `claude plugin list` に `team@team-dev` が有効で表示されるか確認。無ければ段階4-1 |
+| ルールを変えたのに Claude Code に反映されない | 自動更新は「起動後しばらくして取り込み、次の起動から有効」。急ぐときは `/plugin marketplace update team-dev` → `/reload-plugins` |
+| 会社の設定で Claude Code の自動更新が止められている | 環境変数 `FORCE_AUTOUPDATE_PLUGINS` に `1` を設定する(Windows:「環境変数を編集」から追加) |
