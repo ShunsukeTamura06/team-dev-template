@@ -1,8 +1,11 @@
 # (ツール名)
 
-> **テンプレートから作成した直後の方へ**: このREADMEの(  )を埋めてください。
-> テンプレート自体の使い方は [docs/TEMPLATE_GUIDE.md](docs/TEMPLATE_GUIDE.md) を参照。
-> 既存コードがある場合は、Claude Codeで `/update-context` を実行すると下書きを作れます。
+> **この README は、各ツールの README のひな形です。**
+> テンプレートの説明・導入手順・運用手順は、テンプレートリポジトリ `team-dev-template` の
+> [docs/TEMPLATE_GUIDE.md](docs/TEMPLATE_GUIDE.md) を参照してください。
+>
+> 各ツールでは、( )を埋めたうえで、この囲みを削除してください。
+> Claude Code で `/update-context` を実行すると、コードから下書きを作り、分からないことを質問してくれます。
 
 ## 目的
 

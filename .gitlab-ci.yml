@@ -1,5 +1,6 @@
 # MRごとに「lint → test」と「AIレビュー」を実行する。
-# 必要なCI変数(グループ単位で一度設定すれば全リポジトリで使える)は docs/TEMPLATE_GUIDE.md を参照。
+# 必要なCI変数(グループ単位で一度設定すれば全リポジトリで使える)は、
+# テンプレートリポジトリ team-dev-template の docs/ROLLOUT.md を参照。
 
 variables:
   # 社内でDocker Hubに出られない場合は、社内レジストリのイメージに差し替える
@@ -34,7 +35,8 @@ test:
   extends: .python
   stage: check
   script:
-    - pytest -q
+    # テストがまだ1つも無い既存ツール(pytest の終了コード5)は、失敗扱いにしない
+    - pytest -q || [ $? -eq 5 ]
 
 ai_review:
   stage: review
@@ -50,9 +52,11 @@ ai_review:
     - export MR_URL="$CI_MERGE_REQUEST_PROJECT_URL/merge_requests/$CI_MERGE_REQUEST_IID"
     # GitLab への接続
     - export config__git_provider="gitlab"
-    - export gitlab__url="$CI_SERVER_PROTOCOL://$CI_SERVER_FQDN"
+    - export gitlab__url="$CI_SERVER_URL"
     - export gitlab__PERSONAL_ACCESS_TOKEN="$AI_REVIEW_GITLAB_TOKEN"
     - if [ -n "$CI_SERVER_TLS_CA_FILE" ]; then export gitlab__SSL_VERIFY="$CI_SERVER_TLS_CA_FILE"; fi
+    # 社内LLM APIが社内CAの証明書を使う場合: File型のCI変数 INTERNAL_CA_CERT に証明書を登録する
+    - if [ -n "$INTERNAL_CA_CERT" ]; then export SSL_CERT_FILE="$INTERNAL_CA_CERT" REQUESTS_CA_BUNDLE="$INTERNAL_CA_CERT"; fi
     # 社内LLM API(OpenAI互換)への接続。モデル名は "openai/<モデル名>" の形式
     - export openai__api_base="$AI_REVIEW_API_BASE"
     - export openai__key="$AI_REVIEW_API_KEY"
